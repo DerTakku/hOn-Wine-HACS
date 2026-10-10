@@ -1,88 +1,76 @@
-# hOn
-[![GitHub](https://img.shields.io/github/license/gvigroux/hon?color=green)](https://github.com/gvigroux/hon/blob/main/LICENSE)
+# hOn Wine Cellar
 
-<a href="https://www.buymeacoffee.com/gvigroux"><img src="https://img.buymeacoffee.com/button-api/?text=Buy me a coffee&emoji=&slug=gvigroux&button_colour=5F7FFF&font_colour=ffffff&font_family=Cookie&outline_colour=000000&coffee_colour=FFDD00" /></a>
+A Home Assistant integration for Haier wine cellars connected to the hOn app. It is a
+stripped-down fork of [gvigroux/hon](https://github.com/gvigroux/hon) that only
+supports wine cellars (hOn appliance type `WC`). Other hOn appliances on the account
+are ignored.
 
-Home Assistant component supporting all devices integrated with hOn cloud.
-- 2023/03/23 - I've decided to upgrade the main branch from the 'Full-Rework' branch. The old code is inside the legacy branch.
-This move is mandatory to be able maange all devices (even unknown).
-I hope that all the peoples that added their devices will test and upgrade this branch. Thanks :)
-- 2023/04/12 - Change directory structure to be HACS compliant
+Tested against Home Assistant 2026.7.2.
 
-## pre-requisite
-Your appliances must be controlled by the hOn mobile application
-supported device: Haier Climate tested
+## Why this fork
 
-## Installation
+The upstream `hon.turn_light_on` / `hon.turn_light_off` services send a `startProgram`
+command that contains only `lightStatus`. The cellar resets every parameter it does
+not receive, so each light toggle also reset the zone temperatures (see
+gvigroux/hon#166, Andre0512/hon#238).
 
-1. Create a directory ‘hon’ containing the code of the custom_components/hon folder in your `custom_components` directory. 
-2. OR you can add it through HACS > Integration > ... (top right) > Add custom depot > https://github.com/gvigroux/hon
-3. Restart HA
-4. Go to `Settings` - `Devices and Services` and `Add integration`. Search for `hOn` in search bar and select it
-5. Configure the integration with your hOn username and password
-6. Now you can see one new integration named with your email account with the entities and devices registered with hOn App. You can now add this entities in you panel
+This fork changes settings with the `settings` command the hOn app uses. It sends
+every parameter the cellar has:
 
-## How to run any program?
+- Before each change it reads the cellar's current state fresh from the cloud. A
+  temperature you just changed in the hOn app is kept, not reverted.
+- It changes only the value you asked for and re-sends everything else exactly as
+  the cellar reports it.
+- If any current value is unknown, it sends nothing and shows an error. It never
+  falls back to a default.
+- Writes go out one at a time, so a scene that sets the light and a zone together
+  can't overwrite itself.
 
-You can launch any available program by using a dedicated service: `hon.start_program`.
-To get all the details about each program, you can go to the device and click on `Get programs details`
-![Get programs details](/images/device.jpg)
+## Entities
 
-You will receive one notification per program, you just need to look and click at the notificaiton bell ![Bell](/images/bell.jpg)
+| Entity | What it does |
+| --- | --- |
+| `light.<cellar>_light` | Turns the cellar light on and off |
+| `number.<cellar>_zone_N_target_temperature` | Shows and sets a zone's target temperature |
+| `sensor.<cellar>_zone_N_temperature` | A zone's measured temperature |
 
-Now you you can see all programs and all possible settings value. Have fun!
-![Bell](/images/notification.jpg)
+`<cellar>` is the cellar's name in the hOn app. Zones come from the cellar's own
+parameter list (`tempSel`/`tempSelZ1` → zone 1, `tempSelZ2` → zone 2).
 
-## You just want to update one settings?
+## Install (replacing gvigroux/hon)
 
-You can repeat above process with the setting option and the service: `hon.update_settings`.
+1. In HA: **Settings → Devices & services → hOn → ⋮ → Delete**. This removes the old
+   entities, which this fork doesn't provide.
+2. If you installed upstream through HACS, remove it in HACS too (**HACS → hOn → ⋮ →
+   Remove**). Both use the folder `custom_components/hon`.
+3. **HACS → ⋮ → Custom repositories**: add `https://github.com/DerTakku/hOn-Wine-HACS`,
+   type **Integration**. Then open **hOn Wine Cellar** in HACS and **Download** it.
+4. Restart Home Assistant.
+5. **Settings → Devices & services → Add integration → hOn Wine Cellar**, then log in
+   with your hOn app email and password.
+6. Update automations and scenes. The `hon.*` actions no longer exist. Use
+   `light.turn_on` / `light.turn_off` on the light entity, or put the light entity
+   in your scenes.
 
-## Tested devices
-This integration has been tested with the following devices.
+## Troubleshooting
 
-### Climate
-- AS07TS4HRA-M
-- AS25XCAHRA and AS35XCAHRA in 3x1 and 1x1 configuration with one/two outdoor units
-- AS35TEDHRA(M1) and AS25TEDHRA(M1) in 2x1 configuration with one outdoor unit
-- AS35S2SF1FA-WH and AS25S2SF1FA-WH in 2x1 configuration with one outdoor unit
-- AS50S2SF2FA-1/1U50S2SJ2FA
-- AD50S2SS1FA(H)
+If a change is refused with *"current value of … is unknown"*, the cellar's state
+didn't include a value the settings command needs. Nothing was sent, so nothing
+changed. Open the device page and use **⋮ → Download diagnostics**. The file contains
+the settings definition and the current state (no credentials), which shows what is
+missing.
 
-### Oven
-- Candy Oven - FCT825XL WIFI Model
+Debug logging shows every command that was sent:
 
-### Washing Machine
-- HW 49AMC/1-80
-- HW90-B14959S8U1
-- hoover HWPDQ 49AMBC/1-S
-- HW80-B14959TU1DE
-- HW110-B14979U1
+```yaml
+logger:
+  logs:
+    custom_components.hon: debug
+```
 
-### Wine Cooler
-- HWS42GDAU1
-- HWS77GDAU1
+## Tests
 
-### Dish Washer
-- XIB 6B2D3FB
-- HF 5E5D0FW-17
-
-### WashDryer Machine
-- HDQ 496AMBS/1-S
-
-### Tumble Dryer
-- Hoover H-Dry 350, 9 kg Condenser Tumble Dryer HRE C9TBE-80
-- haier HD80-A3959
-- HRE H9A2TE-S
-- HLEH10A2TCEX-17
-- HD90-A3Q979U1-S
-- Candy ROE H9A3TCEX-S
-
-### Air Purifier
-- hoover HHP30C011 (Air Purifier 300)
-- hoover HHP50CA011 (Air Purifier 500)
-
-### Heat Pump Water Heater
-- Haier HP150M8-9 (only programs are working)
-
-### Air to Water Heat Pump
-- Haier Monobloc GT R290
+```bash
+pip install pytest-homeassistant-custom-component==0.13.346  # pins HA 2026.7.2, needs Python 3.14
+pytest
+```

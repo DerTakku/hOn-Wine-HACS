@@ -1,6 +1,6 @@
 {
-    "name": "Haier hOn",
+    "name": "hOn Wine Cellar",
     "content_in_root": false,
-    "render_readme": false,
-    "homeassistant": "2022.6.0"
+    "render_readme": true,
+    "homeassistant": "2025.1.0"
 }
